@@ -14,6 +14,7 @@ export interface BridgeConfig {
   bridgeId: string;
   deviceName: string;
   autoStart: boolean;
+  autoLaunchInitialized?: boolean;
   servers: ServerConfig[];
 }
 

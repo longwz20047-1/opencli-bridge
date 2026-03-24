@@ -54,9 +54,15 @@ app.whenReady().then(async () => {
 
   // Production features
   setupAutoUpdater();
-  setAutoLaunch(true).catch(() => {});
 
   config = loadConfig();
+
+  // Enable auto-launch on first run only (skip in dev)
+  if (app.isPackaged && !config.autoLaunchInitialized) {
+    setAutoLaunch(true).catch(() => {});
+    config.autoLaunchInitialized = true;
+    saveConfig(config);
+  }
   const tray = createTray('disconnected');
   await ensureTrayVisibility(tray);
 

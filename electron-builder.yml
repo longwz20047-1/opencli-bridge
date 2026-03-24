@@ -9,24 +9,22 @@ files:
   - assets/**/*
   - package.json
 
+# electron-builder auto-generates .ico/.icns from icon.png if platform-specific icons are missing
 win:
   target:
     - target: nsis
       arch: [x64, arm64]
-  icon: assets/icon.ico
 
 mac:
   target:
     - target: dmg
       arch: [x64, arm64]
-  icon: assets/icon.icns
   category: public.app-category.developer-tools
 
 linux:
   target:
     - target: AppImage
       arch: [x64, arm64]
-  icon: assets/icon.png
   category: Development
 
 nsis:
@@ -40,7 +38,3 @@ publish:
   owner: git-men
   repo: opencli-bridge
   releaseType: release
-
-autoUpdater:
-  autoDownload: true
-  autoInstallOnAppQuit: true
