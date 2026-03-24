@@ -34,6 +34,17 @@ export function addServer(config: BridgeConfig, configString: string): ServerCon
   const json = JSON.parse(Buffer.from(configString, 'base64url').toString());
   if (json.v !== 1) throw new Error('Unsupported config version');
 
+  // Check for duplicate server (same wsUrl + userId)
+  const existing = config.servers.find(s => s.wsUrl === json.s && s.userId === json.u);
+  if (existing) {
+    // Update pairing token and reconnect
+    existing.pairingToken = json.t;
+    existing.paired = false;
+    existing.apiKey = undefined;
+    saveConfig(config);
+    return existing;
+  }
+
   const server: ServerConfig = {
     id: `srv_${crypto.randomBytes(4).toString('hex')}`,
     name: json.n || 'Unknown Server',

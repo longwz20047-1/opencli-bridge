@@ -6,7 +6,7 @@ export function setupProtocolHandler(callback: (configString: string) => void): 
   onConfigString = callback;
 
   // Register protocol (best-effort, may fail on Linux)
-  if ((process as any).defaultApp) {
+  if (!app.isPackaged) {
     app.setAsDefaultProtocolClient('obk', process.execPath, [__dirname]);
   } else {
     app.setAsDefaultProtocolClient('obk');
