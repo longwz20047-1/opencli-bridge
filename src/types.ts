@@ -2,7 +2,8 @@ export interface ServerConfig {
   id: string;
   name: string;
   wsUrl: string;
-  apiKey: string;
+  apiKey?: string;          // obk_ key (set after pairing)
+  pairingToken?: string;    // obp_ token (temporary, removed after pairing)
   userId: string;
   projects: Array<{ projectId: string; projectName: string }>;
   paired: boolean;

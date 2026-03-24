@@ -1,40 +1,80 @@
 import { app } from 'electron';
-import { loadConfig } from './configStore';
-import { createTray, updateTray } from './tray';
+import { loadConfig, addServer, markPaired, saveConfig } from './configStore';
+import { createTray, updateTray, setOnAddServer } from './tray';
 import { ensureTrayVisibility } from './trayFallback';
+import { setupProtocolHandler } from './protocolHandler';
 import { ConnectionManager } from './connectionManager';
+import type { BridgeConfig } from './types';
 
-let connection: ConnectionManager | null = null;
+const connections = new Map<string, ConnectionManager>();
+let config: BridgeConfig;
+
+function startConnection(serverId: string): void {
+  const server = config.servers.find(s => s.id === serverId);
+  if (!server) return;
+
+  // Disconnect existing connection for this server
+  connections.get(serverId)?.disconnect();
+
+  const conn = new ConnectionManager(
+    server, config,
+    (_sid, status) => {
+      console.log(`[${server.name}] ${status}`);
+      updateTray(
+        status === 'connected' ? 'connected' : 'disconnected',
+        server.name
+      );
+    },
+    (sid, obkKey) => {
+      // Pairing callback: store key, reconnect with permanent auth
+      markPaired(config, sid, obkKey);
+      console.log(`[${server.name}] Paired successfully, reconnecting...`);
+      startConnection(sid);
+    }
+  );
+
+  connections.set(serverId, conn);
+  conn.connect();
+}
+
+function handleNewServer(configString: string): void {
+  try {
+    const server = addServer(config, configString);
+    console.log(`[Main] Added server: ${server.name}`);
+    startConnection(server.id);
+  } catch (err) {
+    console.error('[Main] Invalid config string:', err);
+  }
+}
 
 app.whenReady().then(async () => {
-  // macOS: hide dock icon (tray-only app)
   if (process.platform === 'darwin') app.dock?.hide();
 
-  const config = loadConfig();
+  config = loadConfig();
   const tray = createTray('disconnected');
   await ensureTrayVisibility(tray);
 
+  // Set up protocol handler (obk:// links)
+  setupProtocolHandler(handleNewServer);
+
+  // Set up tray "Add Server..." handler
+  setOnAddServer(handleNewServer);
+
   if (config.servers.length === 0) {
-    console.log(
-      'No servers configured. Edit ~/.opencli-bridge/config.json to add a server.'
-    );
+    console.log('No servers configured. Use "Add Server..." in tray menu or paste a config string.');
     updateTray('disconnected', 'No server configured');
     return;
   }
 
-  // Phase 1: connect to first server only
-  const server = config.servers[0];
-  connection = new ConnectionManager(server, config, (_serverId, status) => {
-    console.log(`[${server.name}] ${status}`);
-    updateTray(
-      status === 'connected' ? 'connected' : 'disconnected',
-      server.name
-    );
-  });
-  connection.connect();
+  // Connect to all configured servers
+  for (const server of config.servers) {
+    startConnection(server.id);
+  }
 });
 
-app.on('window-all-closed', (e: Event) => e.preventDefault()); // Keep running as tray app
+app.on('window-all-closed', (e: Event) => e.preventDefault());
 app.on('before-quit', () => {
-  connection?.disconnect();
+  for (const conn of connections.values()) {
+    conn.disconnect();
+  }
 });

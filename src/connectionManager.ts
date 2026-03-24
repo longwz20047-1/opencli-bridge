@@ -8,30 +8,43 @@ type StatusCallback = (
   status: 'connected' | 'disconnected' | 'connecting'
 ) => void;
 
+type PairedCallback = (serverId: string, obkKey: string) => void;
+
 export class ConnectionManager {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffMs = 1000;
   private consecutiveFailures = 0;
   private onStatusChange: StatusCallback;
+  private onPaired: PairedCallback;
 
   constructor(
     private serverConfig: ServerConfig,
     private bridgeConfig: BridgeConfig,
-    onStatusChange: StatusCallback
+    onStatusChange: StatusCallback,
+    onPaired: PairedCallback = () => {},
   ) {
     this.onStatusChange = onStatusChange;
+    this.onPaired = onPaired;
   }
 
   connect(): void {
     this.onStatusChange(this.serverConfig.id, 'connecting');
 
+    const headers: Record<string, string> = {
+      'x-bridge-id': this.bridgeConfig.bridgeId,
+      'x-device-name': this.bridgeConfig.deviceName,
+    };
+
+    // Use permanent key if paired, pairing token if not
+    if (this.serverConfig.paired && this.serverConfig.apiKey) {
+      headers['x-bridge-key'] = this.serverConfig.apiKey;
+    } else if (this.serverConfig.pairingToken) {
+      headers['x-bridge-pairing-token'] = this.serverConfig.pairingToken;
+    }
+
     const ws = new WebSocket(this.serverConfig.wsUrl, {
-      headers: {
-        'x-bridge-key': this.serverConfig.apiKey,
-        'x-bridge-id': this.bridgeConfig.bridgeId,
-        'x-device-name': this.bridgeConfig.deviceName,
-      },
+      headers,
       handshakeTimeout: 10000,
     });
 
@@ -50,7 +63,15 @@ export class ConnectionManager {
           ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
         } else if (msg.type === 'command') {
           const result = await execute(msg as BridgeCommand);
-          ws.send(JSON.stringify(result));
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(result));
+          } else {
+            console.warn('[WS] Connection closed during command execution, result dropped');
+          }
+        } else if (msg.type === 'paired') {
+          // Pairing successful — server issued us a permanent key
+          console.log('[WS] Pairing successful, received bridge key');
+          this.onPaired(this.serverConfig.id, msg.obkKey);
         } else if (msg.type === 'device_replaced') {
           console.warn(
             `[WS] Device replaced by ${msg.replacedBy} for project ${msg.projectId}`
@@ -66,6 +87,10 @@ export class ConnectionManager {
       this.onStatusChange(this.serverConfig.id, 'disconnected');
       if (code === 4001) {
         console.error('[WS] API key revoked. Not reconnecting.');
+        return;
+      }
+      if (code === 4002) {
+        console.error('[WS] Pairing token expired. Please generate a new one.');
         return;
       }
       this.scheduleReconnect();
