@@ -74,7 +74,7 @@ export class ConnectionManager {
           this.onPaired(this.serverConfig.id, msg.obkKey);
         } else if (msg.type === 'device_replaced') {
           console.warn(
-            `[WS] Device replaced by ${msg.replacedBy} for project ${msg.projectId}`
+            `[WS] Device replaced by ${msg.deviceName} (bridge: ${msg.bridgeId})`
           );
         }
       } catch (err) {
