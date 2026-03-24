@@ -4,6 +4,8 @@ import { createTray, updateTray, setOnAddServer } from './tray';
 import { ensureTrayVisibility } from './trayFallback';
 import { setupProtocolHandler } from './protocolHandler';
 import { ConnectionManager } from './connectionManager';
+import { setupAutoUpdater } from './autoUpdater';
+import { setAutoLaunch } from './autoLaunch';
 import type { BridgeConfig } from './types';
 
 const connections = new Map<string, ConnectionManager>();
@@ -49,6 +51,10 @@ function handleNewServer(configString: string): void {
 
 app.whenReady().then(async () => {
   if (process.platform === 'darwin') app.dock?.hide();
+
+  // Production features
+  setupAutoUpdater();
+  setAutoLaunch(true).catch(() => {});
 
   config = loadConfig();
   const tray = createTray('disconnected');

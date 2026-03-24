@@ -1,0 +1,46 @@
+appId: com.agentstudio.opencli-bridge
+productName: OpenCLI Bridge
+directories:
+  output: release
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - assets/**/*
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: assets/icon.ico
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: assets/icon.icns
+  category: public.app-category.developer-tools
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+  icon: assets/icon.png
+  category: Development
+
+nsis:
+  oneClick: true
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: false
+  createStartMenuShortcut: true
+
+publish:
+  provider: github
+  owner: git-men
+  repo: opencli-bridge
+  releaseType: release
+
+autoUpdater:
+  autoDownload: true
+  autoInstallOnAppQuit: true

@@ -1,4 +1,5 @@
-import { Tray, Menu, nativeImage, app, dialog, ipcMain } from 'electron';
+import { Tray, Menu, nativeImage, app, dialog } from 'electron';
+import { isAutoLaunchEnabled, setAutoLaunch } from './autoLaunch';
 
 let tray: Tray | null = null;
 let onAddServer: ((configString: string) => void) | null = null;
@@ -15,10 +16,10 @@ export function createTray(
   return tray;
 }
 
-export function updateTray(
+export async function updateTray(
   status: 'connected' | 'disconnected' | 'partial',
   serverInfo?: string
-): void {
+): Promise<void> {
   if (!tray) return;
 
   const statusText =
@@ -32,13 +33,27 @@ export function updateTray(
 
   tray.setToolTip(`OpenCLI Bridge - ${statusText}`);
 
+  const autoLaunch = await isAutoLaunchEnabled().catch(() => false);
+
   const menu = Menu.buildFromTemplate([
+    {
+      label: `OpenCLI Bridge v${app.getVersion()}`,
+      enabled: false,
+    },
     {
       label: `${icon} ${serverInfo || 'No server'}  —  ${statusText}`,
       enabled: false,
     },
     { type: 'separator' },
     { label: 'Add Server...', click: () => showPasteDialog() },
+    {
+      label: 'Start at Login',
+      type: 'checkbox',
+      checked: autoLaunch,
+      click: (menuItem) => {
+        setAutoLaunch(menuItem.checked).catch(() => {});
+      },
+    },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]);
@@ -50,7 +65,6 @@ export function getTray(): Tray | null {
 }
 
 async function showPasteDialog(): Promise<void> {
-  // Read from clipboard first (most common flow: user copies config string, then clicks Add Server)
   const { clipboard } = require('electron');
   const clipText = clipboard.readText().trim();
   const hasObkContent = clipText.startsWith('obk://') || clipText.startsWith('eyJ');
