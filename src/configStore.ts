@@ -26,8 +26,13 @@ export function loadConfig(): BridgeConfig {
 }
 
 export function saveConfig(config: BridgeConfig): void {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+  try {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+  } catch (err) {
+    console.error('Failed to save config:', err);
+    throw new Error(`Failed to save config: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 export function addServer(config: BridgeConfig, configString: string): ServerConfig {

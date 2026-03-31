@@ -85,14 +85,29 @@ export class ConnectionManager {
     ws.on('close', (code: number) => {
       this.ws = null;
       this.onStatusChange(this.serverConfig.id, 'disconnected');
+      
+      // 4001: API key revoked (permanent failure)
       if (code === 4001) {
         console.error('[WS] API key revoked. Not reconnecting.');
         return;
       }
+      
+      // 4002: Pairing token expired (permanent failure)
       if (code === 4002) {
         console.error('[WS] Pairing token expired. Please generate a new one.');
         return;
       }
+      
+      // 1000: Normal closure (user-initiated or server shutdown)
+      if (code === 1000) {
+        console.log('[WS] Connection closed normally. Not reconnecting.');
+        return;
+      }
+      
+      // 1001: Going away (server restart or browser navigation)
+      // 1006: Abnormal closure (network issue)
+      // Other codes: Reconnect
+      console.log(`[WS] Connection closed with code ${code}. Reconnecting...`);
       this.scheduleReconnect();
     });
 

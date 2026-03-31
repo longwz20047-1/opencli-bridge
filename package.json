@@ -14,6 +14,7 @@
     "dist:linux": "tsc && electron-builder --linux"
   },
   "dependencies": {
+    "@jackwener/opencli": "^1.5.5",
     "cross-spawn": "^7.0.3",
     "electron-updater": "^6.3.0",
     "auto-launch": "^5.0.6",

@@ -1,5 +1,9 @@
 import spawn from 'cross-spawn';
+import path from 'path';
 import type { BridgeCommand, BridgeResult } from './types';
+
+// Resolve bundled opencli path
+const OPENCLI_BIN = path.join(__dirname, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'main.js');
 
 const MAX_CONCURRENT = 3;
 let running = 0;
@@ -34,9 +38,29 @@ async function executeCommand(cmd: BridgeCommand): Promise<BridgeResult> {
   delete env.ELECTRON_RUN_AS_NODE;
 
   return new Promise((resolve) => {
-    const child = spawn('opencli', args, { env, timeout: cmd.timeout || 30000 });
+    // Use bundled opencli via node
+    const child = spawn('node', [OPENCLI_BIN, ...args], { env });
     let stdout = '';
     let stderr = '';
+    let resolved = false;
+
+    // Manual timeout implementation
+    const timeout = cmd.timeout || 30000;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        child.kill('SIGTERM');
+        resolve({
+          type: 'result',
+          id: cmd.id,
+          success: false,
+          stdout: stdout.trim(),
+          stderr: `Command timed out after ${timeout}ms`,
+          exitCode: 124, // Standard timeout exit code
+          durationMs: Date.now() - start,
+        });
+      }
+    }, timeout);
 
     child.stdout?.on('data', (d: Buffer) => {
       stdout += d;
@@ -45,26 +69,34 @@ async function executeCommand(cmd: BridgeCommand): Promise<BridgeResult> {
       stderr += d;
     });
     child.on('close', (code: number | null) => {
-      resolve({
-        type: 'result',
-        id: cmd.id,
-        success: code === 0,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        exitCode: code ?? 1,
-        durationMs: Date.now() - start,
-      });
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve({
+          type: 'result',
+          id: cmd.id,
+          success: code === 0,
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+          exitCode: code ?? 1,
+          durationMs: Date.now() - start,
+        });
+      }
     });
     child.on('error', (err: Error) => {
-      resolve({
-        type: 'result',
-        id: cmd.id,
-        success: false,
-        stdout: '',
-        stderr: err.message,
-        exitCode: 1,
-        durationMs: Date.now() - start,
-      });
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve({
+          type: 'result',
+          id: cmd.id,
+          success: false,
+          stdout: '',
+          stderr: err.message,
+          exitCode: 1,
+          durationMs: Date.now() - start,
+        });
+      }
     });
   });
 }
