@@ -1,7 +1,18 @@
 import WebSocket from 'ws';
-import type { ServerConfig, BridgeConfig, BridgeCommand } from './types';
+import type { ServerConfig, BridgeConfig, BridgeCommand } from './shared/types';
 import { execute } from './commandRunner';
 import { scanAvailableSites } from './capabilityScanner';
+
+// Read bundled opencli version from its package.json at runtime
+function getBundledOpenCliVersion(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pkg = require('../node_modules/@jackwener/opencli/package.json') as { version: string };
+    return pkg.version;
+  } catch {
+    return 'unknown';
+  }
+}
 
 type StatusCallback = (
   serverId: string,
@@ -15,6 +26,7 @@ export class ConnectionManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffMs = 1000;
   private consecutiveFailures = 0;
+  private wasReplaced = false;
   private onStatusChange: StatusCallback;
   private onPaired: PairedCallback;
 
@@ -29,6 +41,7 @@ export class ConnectionManager {
   }
 
   connect(): void {
+    this.wasReplaced = false;
     this.onStatusChange(this.serverConfig.id, 'connecting');
 
     const headers: Record<string, string> = {
@@ -53,7 +66,7 @@ export class ConnectionManager {
       this.backoffMs = 1000;
       this.consecutiveFailures = 0;
       this.onStatusChange(this.serverConfig.id, 'connected');
-      this.sendRegister();
+      this.sendRegister().catch((err) => console.error('[WS] Register error:', err));
     });
 
     ws.on('message', async (data: WebSocket.RawData) => {
@@ -73,9 +86,29 @@ export class ConnectionManager {
           console.log('[WS] Pairing successful, received bridge key');
           this.onPaired(this.serverConfig.id, msg.obkKey);
         } else if (msg.type === 'device_replaced') {
-          console.warn(
-            `[WS] Device replaced by ${msg.deviceName} (bridge: ${msg.bridgeId})`
-          );
+          console.warn('[WS] Device replaced by another connection');
+          this.wasReplaced = true;
+          this.disconnect();
+          return;
+        } else if (msg.type === 'config_update') {
+          // Server pushed domain config change — log it (domain filtering is server-side)
+          console.log(`[WS] Config update received: enabledDomains=${JSON.stringify(msg.enabledDomains)}`);
+        } else if (msg.type === 'diagnose') {
+          // Server requests diagnostics — respond with current capabilities
+          const sites = await scanAvailableSites();
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'diagnose_result',
+              id: msg.id,
+              opencliVersion: getBundledOpenCliVersion(),
+              nodeVersion: process.versions.node,
+              platform: process.platform,
+              daemonRunning: sites.length > 0,
+              extensionConnected: false,
+              availableSites: sites,
+              timestamp: Date.now(),
+            }));
+          }
         }
       } catch (err) {
         console.error('[WS] Message handling error:', err);
@@ -85,22 +118,21 @@ export class ConnectionManager {
     ws.on('close', (code: number) => {
       this.ws = null;
       this.onStatusChange(this.serverConfig.id, 'disconnected');
-      
+
       // 4001: API key revoked (permanent failure)
-      if (code === 4001) {
-        console.error('[WS] API key revoked. Not reconnecting.');
-        return;
-      }
-      
       // 4002: Pairing token expired (permanent failure)
-      if (code === 4002) {
-        console.error('[WS] Pairing token expired. Please generate a new one.');
-        return;
-      }
-      
-      // 1000: Normal closure (user-initiated or server shutdown)
-      if (code === 1000) {
-        console.log('[WS] Connection closed normally. Not reconnecting.');
+      // 1000: Normal closure (user-initiated, server shutdown, or device replaced)
+      // wasReplaced: Extra guard in case close code is modified by proxy
+      if (code === 4001 || code === 4002 || code === 1000 || this.wasReplaced) {
+        if (code === 4001) {
+          console.error('[WS] API key revoked. Not reconnecting.');
+        } else if (code === 4002) {
+          console.error('[WS] Pairing token expired. Please generate a new one.');
+        } else if (this.wasReplaced) {
+          console.log('[WS] Device replaced. Not reconnecting.');
+        } else {
+          console.log('[WS] Connection closed normally. Not reconnecting.');
+        }
         return;
       }
       
@@ -116,9 +148,10 @@ export class ConnectionManager {
     });
   }
 
-  private sendRegister(): void {
+  private async sendRegister(): Promise<void> {
     if (!this.ws) return;
-    const sites = scanAvailableSites();
+    const sites = await scanAvailableSites();
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return; // WS may have closed during scan
     this.ws.send(
       JSON.stringify({
         type: 'register',
@@ -127,7 +160,7 @@ export class ConnectionManager {
         userId: this.serverConfig.userId,
         projects: this.serverConfig.projects,
         capabilities: {
-          opencliVersion: '1.3.1',
+          opencliVersion: getBundledOpenCliVersion(),
           nodeVersion: process.versions.node,
           platform: process.platform,
           daemonRunning: sites.length > 0,

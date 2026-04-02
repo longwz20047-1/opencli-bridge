@@ -1,11 +1,12 @@
 import spawn from 'cross-spawn';
 import path from 'path';
-import type { BridgeCommand, BridgeResult } from './types';
+import type { BridgeCommand, BridgeResult } from './shared/types';
 
 // Resolve bundled opencli path
 const OPENCLI_BIN = path.join(__dirname, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'main.js');
 
 const MAX_CONCURRENT = 3;
+export const MAX_QUEUE = 100;
 let running = 0;
 const queue: Array<{ cmd: BridgeCommand; resolve: (r: BridgeResult) => void }> = [];
 
@@ -23,6 +24,17 @@ function processQueue(): void {
 }
 
 export function execute(cmd: BridgeCommand): Promise<BridgeResult> {
+  if (queue.length >= MAX_QUEUE) {
+    return Promise.resolve({
+      type: 'result',
+      id: cmd.id,
+      success: false,
+      stdout: '',
+      stderr: `Command queue full (${queue.length}/${MAX_QUEUE}). Please wait.`,
+      exitCode: -1,
+      durationMs: 0,
+    });
+  }
   return new Promise((resolve) => {
     queue.push({ cmd, resolve });
     processQueue();

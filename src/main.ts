@@ -1,15 +1,30 @@
 import { app } from 'electron';
 import { loadConfig, addServer, markPaired, saveConfig } from './configStore';
 import { createTray, updateTray, setOnAddServer } from './tray';
+import type { ServerStatus } from './tray';
 import { ensureTrayVisibility } from './trayFallback';
 import { setupProtocolHandler } from './protocolHandler';
 import { ConnectionManager } from './connectionManager';
 import { setupAutoUpdater } from './autoUpdater';
 import { setAutoLaunch } from './autoLaunch';
-import type { BridgeConfig } from './types';
+import type { BridgeConfig } from './shared/types';
+
+// Single-instance lock: required for Windows protocol handler (obk://).
+// Without this, clicking obk:// on Windows spawns a second instance instead
+// of firing 'second-instance' on the existing one.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+}
 
 const connections = new Map<string, ConnectionManager>();
+// Per-server status for tray rendering: serverId → status snapshot
+const serverStatusMap = new Map<string, ServerStatus>();
 let config: BridgeConfig;
+
+function getStatusList(): ServerStatus[] {
+  return [...serverStatusMap.values()];
+}
 
 function startConnection(serverId: string): void {
   const server = config.servers.find(s => s.id === serverId);
@@ -18,14 +33,24 @@ function startConnection(serverId: string): void {
   // Disconnect existing connection for this server
   connections.get(serverId)?.disconnect();
 
+  // Initialise status entry (connecting)
+  serverStatusMap.set(serverId, {
+    name: server.name,
+    status: 'connecting',
+    projectCount: server.projects.length,
+  });
+  updateTray(getStatusList()).catch(() => {});
+
   const conn = new ConnectionManager(
     server, config,
     (_sid, status) => {
       console.log(`[${server.name}] ${status}`);
-      updateTray(
-        status === 'connected' ? 'connected' : 'disconnected',
-        server.name
-      );
+      serverStatusMap.set(serverId, {
+        name: server.name,
+        status: status === 'connected' ? 'connected' : 'disconnected',
+        projectCount: server.projects.length,
+      });
+      updateTray(getStatusList()).catch(() => {});
     },
     (sid, obkKey) => {
       // Pairing callback: store key, reconnect with permanent auth
@@ -63,7 +88,8 @@ app.whenReady().then(async () => {
     config.autoLaunchInitialized = true;
     saveConfig(config);
   }
-  const tray = createTray('disconnected');
+
+  const tray = createTray([]);
   await ensureTrayVisibility(tray);
 
   // Set up protocol handler (obk:// links)
@@ -74,7 +100,7 @@ app.whenReady().then(async () => {
 
   if (config.servers.length === 0) {
     console.log('No servers configured. Use "Add Server..." in tray menu or paste a config string.');
-    updateTray('disconnected', 'No server configured');
+    updateTray([]).catch(() => {});
     return;
   }
 
@@ -84,7 +110,9 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('window-all-closed', (e: Event) => e.preventDefault());
+app.on('window-all-closed', () => {
+  // Prevent app from quitting when all windows are closed (tray app)
+});
 app.on('before-quit', () => {
   for (const conn of connections.values()) {
     conn.disconnect();
