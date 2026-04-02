@@ -1,5 +1,6 @@
 // src/main/securityPolicy.ts
 import { isLoopback } from '../shared/security';
+import { session } from 'electron';
 
 /**
  * Validate a WebSocket URL against the WSS enforcement policy.
@@ -34,4 +35,27 @@ export function validateWsUrl(
   } catch {
     return { valid: false, reason: 'Invalid URL format' };
   }
+}
+
+/**
+ * Set Content Security Policy headers for the renderer process.
+ *
+ * SECURITY NOTE:
+ * - Dev mode: allows 'unsafe-inline' scripts + ws://localhost:* for HMR.
+ *   This is ONLY active when !app.isPackaged. Production builds never hit this path.
+ * - Prod mode: strict CSP — no inline scripts, no external WebSocket.
+ */
+export function setupCSP(isDev: boolean): void {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const csp = isDev
+      ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:*; img-src 'self' data:"
+      : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:";
+
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp],
+      },
+    });
+  });
 }

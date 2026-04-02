@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import * as path from 'path';
 import { loadConfig, addServer, markPaired, saveConfig } from './configStore';
 import { createTray, updateTray, setOnAddServer } from './tray';
 import type { ServerStatus } from './tray';
@@ -8,17 +9,17 @@ import { ConnectionManager } from './connectionManager';
 import { setupAutoUpdater } from './autoUpdater';
 import { setAutoLaunch } from './autoLaunch';
 import type { BridgeConfig } from './shared/types';
+import { createWindow, setupAppLifecycle, setupMacOSDock, showAndFocus } from './main/windowManager';
+import { registerIpcHandlers, forwardConnectionEvents } from './main/ipcHandlers';
+import { setupCSP } from './main/securityPolicy';
 
 // Single-instance lock: required for Windows protocol handler (obk://).
-// Without this, clicking obk:// on Windows spawns a second instance instead
-// of firing 'second-instance' on the existing one.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 }
 
 const connections = new Map<string, ConnectionManager>();
-// Per-server status for tray rendering: serverId → status snapshot
 const serverStatusMap = new Map<string, ServerStatus>();
 let config: BridgeConfig;
 
@@ -26,14 +27,12 @@ function getStatusList(): ServerStatus[] {
   return [...serverStatusMap.values()];
 }
 
-function startConnection(serverId: string): void {
+function startConnection(serverId: string): ConnectionManager | undefined {
   const server = config.servers.find(s => s.id === serverId);
-  if (!server) return;
+  if (!server) return undefined;
 
-  // Disconnect existing connection for this server
   connections.get(serverId)?.disconnect();
 
-  // Initialise status entry (connecting)
   serverStatusMap.set(serverId, {
     name: server.name,
     status: 'connecting',
@@ -41,27 +40,34 @@ function startConnection(serverId: string): void {
   });
   updateTray(getStatusList()).catch(() => {});
 
-  const conn = new ConnectionManager(
-    server, config,
-    (_sid, status) => {
-      console.log(`[${server.name}] ${status}`);
-      serverStatusMap.set(serverId, {
-        name: server.name,
-        status: status === 'connected' ? 'connected' : 'disconnected',
-        projectCount: server.projects.length,
-      });
-      updateTray(getStatusList()).catch(() => {});
-    },
-    (sid, obkKey) => {
-      // Pairing callback: store key, reconnect with permanent auth
-      markPaired(config, sid, obkKey);
-      console.log(`[${server.name}] Paired successfully, reconnecting...`);
-      startConnection(sid);
-    }
-  );
+  const conn = new ConnectionManager(server, config);
+
+  conn.on('status', (sid, status) => {
+    console.log(`[${server.name}] ${status}`);
+    serverStatusMap.set(sid, {
+      name: server.name,
+      status: status === 'connected' ? 'connected' : 'disconnected',
+      projectCount: server.projects.length,
+    });
+    updateTray(getStatusList()).catch(() => {});
+  });
+
+  conn.on('paired', (sid, obkKey) => {
+    markPaired(config, sid, obkKey);
+    console.log(`[${server.name}] Paired successfully, reconnecting...`);
+    startConnection(sid);
+  });
+
+  conn.on('device:replaced', (sid) => {
+    console.warn(`[${server.name}] Device replaced, removing from connections`);
+    connections.delete(sid);
+    serverStatusMap.delete(sid);
+    updateTray(getStatusList()).catch(() => {});
+  });
 
   connections.set(serverId, conn);
   conn.connect();
+  return conn;
 }
 
 function handleNewServer(configString: string): void {
@@ -74,45 +80,74 @@ function handleNewServer(configString: string): void {
   }
 }
 
+// Lifecycle: before-quit + window-all-closed (all platforms)
+setupAppLifecycle();
+
 app.whenReady().then(async () => {
-  if (process.platform === 'darwin') app.dock?.hide();
+  // Security: CSP headers
+  const isDev = !app.isPackaged;
+  setupCSP(isDev);
+
+  // macOS dock behavior
+  if (process.platform === 'darwin') {
+    setupMacOSDock();
+  }
 
   // Production features
   setupAutoUpdater();
 
   config = loadConfig();
 
-  // Enable auto-launch on first run only (skip in dev)
+  // Auto-launch on first run (skip in dev)
   if (app.isPackaged && !config.autoLaunchInitialized) {
     setAutoLaunch(true).catch(() => {});
     config.autoLaunchInitialized = true;
     saveConfig(config);
   }
 
+  // Window (Phase 2: placeholder HTML until Phase 3 adds React)
+  const mainWindow = createWindow(config);
+  if (isDev) {
+    mainWindow.loadFile(path.join(__dirname, '../src/renderer/index.html'));
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'));
+  }
+
+  // IPC handlers
+  registerIpcHandlers(() => connections);
+
+  // Tray
   const tray = createTray([]);
   await ensureTrayVisibility(tray);
 
-  // Set up protocol handler (obk:// links)
+  // Protocol handler (obk:// links)
   setupProtocolHandler(handleNewServer);
-
-  // Set up tray "Add Server..." handler
   setOnAddServer(handleNewServer);
 
-  if (config.servers.length === 0) {
-    console.log('No servers configured. Use "Add Server..." in tray menu or paste a config string.');
-    updateTray([]).catch(() => {});
-    return;
-  }
+  // Second instance: show window + handle protocol URL
+  app.on('second-instance', (_event, argv) => {
+    showAndFocus();
+    const obkArg = argv.find(a => a.startsWith('obk://'));
+    if (obkArg) {
+      handleNewServer(obkArg.replace('obk://', ''));
+    }
+  });
 
   // Connect to all configured servers
   for (const server of config.servers) {
-    startConnection(server.id);
+    const conn = startConnection(server.id);
+    if (conn) {
+      forwardConnectionEvents(mainWindow, conn);
+    }
+  }
+
+  // Show window if no servers (first-time experience)
+  if (config.servers.length === 0) {
+    showAndFocus();
   }
 });
 
-app.on('window-all-closed', () => {
-  // Prevent app from quitting when all windows are closed (tray app)
-});
+// Disconnect all on quit
 app.on('before-quit', () => {
   for (const conn of connections.values()) {
     conn.disconnect();

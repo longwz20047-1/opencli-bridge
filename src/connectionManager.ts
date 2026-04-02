@@ -1,5 +1,7 @@
 import WebSocket from 'ws';
-import type { ServerConfig, BridgeConfig, BridgeCommand } from './shared/types';
+import TypedEmitter from 'typed-emitter';
+import EventEmitter from 'events';
+import type { ServerConfig, BridgeConfig, BridgeCommand, BridgeResult } from './shared/types';
 import { execute } from './commandRunner';
 import { scanAvailableSites } from './capabilityScanner';
 
@@ -14,35 +16,34 @@ function getBundledOpenCliVersion(): string {
   }
 }
 
-type StatusCallback = (
-  serverId: string,
-  status: 'connected' | 'disconnected' | 'connecting'
-) => void;
+export interface ConnectionEvents {
+  [key: string]: (...args: any[]) => void;
+  status: (serverId: string, status: 'connected' | 'disconnected' | 'connecting') => void;
+  paired: (serverId: string, obkKey: string) => void;
+  'command:start': (serverId: string, command: BridgeCommand) => void;
+  'command:complete': (serverId: string, command: BridgeCommand, result: BridgeResult) => void;
+  'device:replaced': (serverId: string) => void;
+  'config:update': (serverId: string, enabledDomains: string[]) => void;
+  error: (serverId: string, error: Error) => void;
+}
 
-type PairedCallback = (serverId: string, obkKey: string) => void;
-
-export class ConnectionManager {
+export class ConnectionManager extends (EventEmitter as new () => TypedEmitter<ConnectionEvents>) {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffMs = 1000;
   private consecutiveFailures = 0;
   private wasReplaced = false;
-  private onStatusChange: StatusCallback;
-  private onPaired: PairedCallback;
 
   constructor(
     private serverConfig: ServerConfig,
     private bridgeConfig: BridgeConfig,
-    onStatusChange: StatusCallback,
-    onPaired: PairedCallback = () => {},
   ) {
-    this.onStatusChange = onStatusChange;
-    this.onPaired = onPaired;
+    super();
   }
 
   connect(): void {
     this.wasReplaced = false;
-    this.onStatusChange(this.serverConfig.id, 'connecting');
+    this.emit('status', this.serverConfig.id, 'connecting');
 
     const headers: Record<string, string> = {
       'x-bridge-id': this.bridgeConfig.bridgeId,
@@ -65,7 +66,7 @@ export class ConnectionManager {
       this.ws = ws;
       this.backoffMs = 1000;
       this.consecutiveFailures = 0;
-      this.onStatusChange(this.serverConfig.id, 'connected');
+      this.emit('status', this.serverConfig.id, 'connected');
       this.sendRegister().catch((err) => console.error('[WS] Register error:', err));
     });
 
@@ -75,26 +76,28 @@ export class ConnectionManager {
         if (msg.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
         } else if (msg.type === 'command') {
-          const result = await execute(msg as BridgeCommand);
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(result));
+          const cmd = msg as BridgeCommand;
+          this.emit('command:start', this.serverConfig.id, cmd);
+          const result = await execute(cmd);
+          this.emit('command:complete', this.serverConfig.id, cmd, result);
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(result));
           } else {
             console.warn('[WS] Connection closed during command execution, result dropped');
           }
         } else if (msg.type === 'paired') {
-          // Pairing successful — server issued us a permanent key
           console.log('[WS] Pairing successful, received bridge key');
-          this.onPaired(this.serverConfig.id, msg.obkKey);
+          this.emit('paired', this.serverConfig.id, msg.obkKey);
         } else if (msg.type === 'device_replaced') {
           console.warn('[WS] Device replaced by another connection');
           this.wasReplaced = true;
+          this.emit('device:replaced', this.serverConfig.id);
           this.disconnect();
           return;
         } else if (msg.type === 'config_update') {
-          // Server pushed domain config change — log it (domain filtering is server-side)
           console.log(`[WS] Config update received: enabledDomains=${JSON.stringify(msg.enabledDomains)}`);
+          this.emit('config:update', this.serverConfig.id, msg.enabledDomains || []);
         } else if (msg.type === 'diagnose') {
-          // Server requests diagnostics — respond with current capabilities
           const sites = await scanAvailableSites();
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
@@ -117,12 +120,8 @@ export class ConnectionManager {
 
     ws.on('close', (code: number) => {
       this.ws = null;
-      this.onStatusChange(this.serverConfig.id, 'disconnected');
+      this.emit('status', this.serverConfig.id, 'disconnected');
 
-      // 4001: API key revoked (permanent failure)
-      // 4002: Pairing token expired (permanent failure)
-      // 1000: Normal closure (user-initiated, server shutdown, or device replaced)
-      // wasReplaced: Extra guard in case close code is modified by proxy
       if (code === 4001 || code === 4002 || code === 1000 || this.wasReplaced) {
         if (code === 4001) {
           console.error('[WS] API key revoked. Not reconnecting.');
@@ -135,23 +134,21 @@ export class ConnectionManager {
         }
         return;
       }
-      
-      // 1001: Going away (server restart or browser navigation)
-      // 1006: Abnormal closure (network issue)
-      // Other codes: Reconnect
+
       console.log(`[WS] Connection closed with code ${code}. Reconnecting...`);
       this.scheduleReconnect();
     });
 
     ws.on('error', (err: Error) => {
       console.error('[WS] Error:', err.message);
+      this.emit('error', this.serverConfig.id, err);
     });
   }
 
   private async sendRegister(): Promise<void> {
     if (!this.ws) return;
     const sites = await scanAvailableSites();
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return; // WS may have closed during scan
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(
       JSON.stringify({
         type: 'register',
