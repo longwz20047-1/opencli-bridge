@@ -64,6 +64,13 @@ export function createWindow(config: BridgeConfig): BrowserWindow {
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
 
+  // Load renderer content
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  }
+
   return mainWindow;
 }
 

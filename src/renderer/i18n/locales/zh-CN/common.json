@@ -1,0 +1,16 @@
+{
+  "allSystemsOperational": "所有系统运行正常",
+  "partialDegradation": "部分服务降级",
+  "allServicesDown": "所有服务离线",
+  "servers": "服务器",
+  "commands": "命令",
+  "sites": "站点",
+  "online": "在线",
+  "today": "今日",
+  "failed": "失败",
+  "enabled": "已启用",
+  "recentActivity": "最近活动",
+  "viewAll": "查看全部",
+  "noServers": "未配置服务器",
+  "addFirstServer": "添加第一个服务器以开始使用"
+}

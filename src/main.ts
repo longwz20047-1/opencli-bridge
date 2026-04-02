@@ -105,13 +105,8 @@ app.whenReady().then(async () => {
     saveConfig(config);
   }
 
-  // Window (Phase 2: placeholder HTML until Phase 3 adds React)
+  // Window (createWindow handles URL loading internally)
   const mainWindow = createWindow(config);
-  if (isDev) {
-    mainWindow.loadFile(path.join(__dirname, '../src/renderer/index.html'));
-  } else {
-    mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'));
-  }
 
   // IPC handlers
   registerIpcHandlers(() => connections);

@@ -1,0 +1,16 @@
+{
+  "allSystemsOperational": "All Systems Operational",
+  "partialDegradation": "Partial Service Degradation",
+  "allServicesDown": "All Services Down",
+  "servers": "Servers",
+  "commands": "Commands",
+  "sites": "Sites",
+  "online": "online",
+  "today": "today",
+  "failed": "failed",
+  "enabled": "enabled",
+  "recentActivity": "Recent Activity",
+  "viewAll": "View All",
+  "noServers": "No servers configured",
+  "addFirstServer": "Add your first server to get started"
+}
