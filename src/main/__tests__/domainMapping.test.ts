@@ -1,6 +1,6 @@
 // src/main/__tests__/domainMapping.test.ts
 import { describe, it, expect } from 'vitest';
-import { DOMAIN_MAPPING, getDomainForSite } from '../domainMapping';
+import { DOMAIN_MAPPING, getDomainForSite } from '../../shared/domainMapping';
 
 describe('domainMapping', () => {
   it('exports a non-empty DOMAIN_MAPPING', () => {

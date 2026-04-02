@@ -1,0 +1,133 @@
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { SiteToggle } from '../components/SiteToggle';
+import { Shield, RefreshCw, RotateCcw } from 'lucide-react';
+import { getDomainForSite, DOMAIN_MAPPING } from '../../shared/domainMapping';
+
+export default function SiteControl() {
+  const [allowedSites, setAllowedSites] = useState<string[] | 'prompt'>('prompt');
+  const [availableSites, setAvailableSites] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [sitesConfig, scannedSites] = await Promise.all([
+        window.bridge.invoke('sites:list'),
+        window.bridge.invoke('sites:scan'),
+      ]);
+      setAllowedSites((sitesConfig as any).allowedSites);
+      setAvailableSites(scannedSites as string[]);
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const groupedSites = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    for (const site of availableSites) {
+      const domain = getDomainForSite(site);
+      if (!groups[domain]) groups[domain] = [];
+      groups[domain].push(site);
+    }
+    for (const d of Object.keys(groups)) groups[d].sort();
+    return groups;
+  }, [availableSites]);
+
+  const domainOrder = useMemo(() => {
+    const known = Object.keys(DOMAIN_MAPPING);
+    const present = Object.keys(groupedSites);
+    const ordered = known.filter(d => present.includes(d));
+    if (present.includes('other')) ordered.push('other');
+    return ordered;
+  }, [groupedSites]);
+
+  const isSiteEnabled = (site: string): boolean => {
+    if (allowedSites === 'prompt') return true;
+    return allowedSites.includes(site);
+  };
+
+  const updateSites = async (newSites: string[] | 'prompt') => {
+    setAllowedSites(newSites);
+    await window.bridge.invoke('sites:update', newSites);
+  };
+
+  const handleToggle = (site: string, enabled: boolean) => {
+    if (allowedSites === 'prompt') {
+      const all = availableSites.filter(s => s !== site || enabled);
+      updateSites(all);
+      return;
+    }
+    if (enabled) updateSites([...allowedSites, site]);
+    else updateSites(allowedSites.filter(s => s !== site));
+  };
+
+  const handleRescan = async () => {
+    setScanning(true);
+    try {
+      const scanned = await window.bridge.invoke('sites:scan');
+      setAvailableSites(scanned as string[]);
+    } finally { setScanning(false); }
+  };
+
+  const disableAll = () => {
+    if (!confirm('Disable all sites? Commands for disabled sites will be rejected.')) return;
+    updateSites([]);
+  };
+
+  const resetToPrompt = () => updateSites('prompt');
+
+  if (loading) return <div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-3 border-b">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-primary" />
+            <h1 className="text-lg font-semibold">Site Control</h1>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {allowedSites === 'prompt' ? 'Mode: Prompt (all sites visible)' : `${allowedSites.length} of ${availableSites.length} sites enabled`}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={disableAll} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">Disable All</button>
+          <button onClick={resetToPrompt} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">
+            <RotateCcw className="h-3.5 w-3.5" /> Reset to Prompt
+          </button>
+          <div className="flex-1" />
+          <button onClick={handleRescan} disabled={scanning} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">
+            <RefreshCw className={`h-3.5 w-3.5 ${scanning ? 'animate-spin' : ''}`} /> {scanning ? 'Scanning...' : 'Rescan'}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {availableSites.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <Shield className="h-12 w-12 mb-4 opacity-30" />
+            <p className="text-sm">No sites detected.</p>
+            <p className="text-xs mt-1">Connect a server and run a scan to discover available sites.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {domainOrder.map(domain => (
+              <div key={domain} className="border rounded-lg p-3">
+                <h3 className="text-sm font-semibold mb-2 capitalize flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary" />{domain}
+                  <span className="text-xs text-muted-foreground font-normal">({groupedSites[domain].length})</span>
+                </h3>
+                <div className="space-y-0.5">
+                  {groupedSites[domain].map(site => (
+                    <SiteToggle key={site} site={site} enabled={isSiteEnabled(site)} onToggle={handleToggle} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

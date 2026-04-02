@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Server, Settings } from 'lucide-react';
+import { LayoutDashboard, Server, Activity, History, Shield, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Server, label: 'Servers', path: '/servers' },
+  { icon: Activity, label: 'Monitor', path: '/monitor' },
+  { icon: History, label: 'History', path: '/history' },
+  { icon: Shield, label: 'Site Control', path: '/sites' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 

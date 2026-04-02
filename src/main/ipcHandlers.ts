@@ -1,8 +1,16 @@
 // src/main/ipcHandlers.ts
 import { ipcMain, BrowserWindow } from 'electron';
+import * as path from 'path';
+import * as os from 'os';
 import { IPC } from '../shared/ipcChannels';
 import { loadConfig, saveConfig, addServer, removeServer } from '../configStore';
 import type { ConnectionManager } from '../connectionManager';
+import { LocalHistory } from './localHistory';
+import { scanAvailableSites } from '../capabilityScanner';
+
+const localHistory = new LocalHistory(
+  path.join(os.homedir(), '.opencli-bridge', 'history.json'),
+);
 
 /**
  * Register all IPC invoke handlers.
@@ -53,6 +61,51 @@ export function registerIpcHandlers(
     Object.assign(config, updates);
     saveConfig(config);
     return config;
+  });
+
+  // History
+  ipcMain.handle(IPC.HISTORY_LIST, () => localHistory.list());
+  ipcMain.handle(IPC.HISTORY_CLEAR, () => localHistory.clear());
+  ipcMain.handle(IPC.HISTORY_STATS, () => localHistory.stats());
+  ipcMain.handle(IPC.HISTORY_DETAIL, (_event, id: string) => {
+    return localHistory.list().then(records => records.find(r => r.id === id));
+  });
+
+  // Sites
+  ipcMain.handle(IPC.SITES_LIST, () => {
+    const config = loadConfig();
+    return { allowedSites: config.allowedSites };
+  });
+  ipcMain.handle(IPC.SITES_UPDATE, (_event, sites: string[] | 'prompt') => {
+    const config = loadConfig();
+    config.allowedSites = sites;
+    saveConfig(config);
+  });
+  ipcMain.handle(IPC.SITES_SCAN, () => scanAvailableSites());
+}
+
+/**
+ * Hook history recording into command completion events.
+ */
+export function setupHistoryRecording(conn: ConnectionManager): void {
+  conn.on('command:complete', (serverId, cmd, result) => {
+    const server = loadConfig().servers.find(s => s.id === serverId);
+    localHistory.record({
+      id: cmd.id,
+      serverId,
+      serverName: server?.name || 'Unknown',
+      site: cmd.site,
+      action: cmd.action,
+      args: cmd.args,
+      success: result.success,
+      status: result.exitCode === 124 ? 'timeout' : result.success ? 'success' : 'error',
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      durationMs: result.durationMs,
+      startedAt: new Date(Date.now() - result.durationMs).toISOString(),
+      completedAt: new Date().toISOString(),
+    });
   });
 }
 

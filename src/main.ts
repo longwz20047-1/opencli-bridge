@@ -10,7 +10,7 @@ import { setupAutoUpdater } from './autoUpdater';
 import { setAutoLaunch } from './autoLaunch';
 import type { BridgeConfig } from './shared/types';
 import { createWindow, setupAppLifecycle, setupMacOSDock, showAndFocus } from './main/windowManager';
-import { registerIpcHandlers, forwardConnectionEvents } from './main/ipcHandlers';
+import { registerIpcHandlers, forwardConnectionEvents, setupHistoryRecording } from './main/ipcHandlers';
 import { setupCSP } from './main/securityPolicy';
 
 // Single-instance lock: required for Windows protocol handler (obk://).
@@ -133,6 +133,7 @@ app.whenReady().then(async () => {
     const conn = startConnection(server.id);
     if (conn) {
       forwardConnectionEvents(mainWindow, conn);
+      setupHistoryRecording(conn);
     }
   }
 
