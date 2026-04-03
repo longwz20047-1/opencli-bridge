@@ -7,6 +7,7 @@ import { loadConfig, saveConfig, addServer, removeServer } from '../configStore'
 import type { ConnectionManager } from '../connectionManager';
 import { LocalHistory } from './localHistory';
 import { scanAvailableSites } from '../capabilityScanner';
+import { setAutoLaunch } from '../autoLaunch';
 
 // Use config-driven maxRecords (C5 fix)
 function createLocalHistory(): LocalHistory {
@@ -44,6 +45,7 @@ function safeHandle(channel: string, handler: (...args: any[]) => any): void {
  */
 export function registerIpcHandlers(
   getConnections: () => Map<string, ConnectionManager>,
+  onServerAdded?: (serverId: string) => void,
 ): void {
   // Server management
   safeHandle(IPC.SERVERS_LIST, () => {
@@ -52,7 +54,10 @@ export function registerIpcHandlers(
 
   safeHandle(IPC.SERVERS_ADD, (_event, configString: string) => {
     const config = loadConfig();
-    return addServer(config, configString);
+    const server = addServer(config, configString);
+    // Start WebSocket connection immediately (P1 #1 fix)
+    onServerAdded?.(server.id);
+    return server;
   });
 
   safeHandle(IPC.SERVERS_REMOVE, (_event, serverId: string) => {
@@ -80,13 +85,21 @@ export function registerIpcHandlers(
     return settings;
   });
 
-  safeHandle(IPC.SETTINGS_UPDATE, (_event, updates: Record<string, unknown>) => {
+  safeHandle(IPC.SETTINGS_UPDATE, async (_event, updates: Record<string, unknown>) => {
     const config = loadConfig();
     const filtered = Object.fromEntries(
       Object.entries(updates).filter(([k]) => ALLOWED_SETTINGS_KEYS.includes(k))
     );
     Object.assign(config, filtered);
     saveConfig(config);
+
+    // Side effects for settings that need runtime action (P1 #3 fix)
+    if ('autoStart' in filtered) {
+      setAutoLaunch(!!filtered.autoStart).catch(err =>
+        console.error('[Settings] Failed to update auto-launch:', err)
+      );
+    }
+
     return config;
   });
 

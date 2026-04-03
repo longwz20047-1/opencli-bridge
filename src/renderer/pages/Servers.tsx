@@ -1,13 +1,15 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Server, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useServerStore } from '../stores/useServerStore';
 import { useBridgeEvent, bridgeInvoke } from '../hooks/useBridge';
 import { StatusBadge } from '../components/StatusBadge';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingState } from '../components/LoadingState';
+import { WelcomeGuide } from '../components/WelcomeGuide';
 
 export function Servers() {
   const { servers, loading, fetchServers, updateStatus } = useServerStore();
+  const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => { fetchServers(); }, [fetchServers]);
 
@@ -23,6 +25,7 @@ export function Servers() {
   };
 
   const handleRemove = async (serverId: string) => {
+    if (!confirm('Remove this server? This will disconnect and delete the configuration.')) return;
     await bridgeInvoke('servers:remove', serverId);
     fetchServers();
   };
@@ -31,9 +34,15 @@ export function Servers() {
 
   return (
     <div className="space-y-6">
+      {showAdd && (
+        <WelcomeGuide onConnected={() => { setShowAdd(false); fetchServers(); }} />
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Servers</h1>
-        <button className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90">
+        <button
+          onClick={() => setShowAdd(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
+        >
           <Plus className="w-4 h-4" /> Add Server
         </button>
       </div>

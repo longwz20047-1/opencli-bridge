@@ -1,9 +1,17 @@
 import { autoUpdater } from 'electron-updater';
 import { app } from 'electron';
+import { loadConfig } from './configStore';
 
 export function setupAutoUpdater(): void {
   if (!app.isPackaged) {
     console.log('[AutoUpdater] Skipping in dev mode');
+    return;
+  }
+
+  // Respect user's autoUpdate preference (P1 #4 fix)
+  const config = loadConfig();
+  if (!config.autoUpdate) {
+    console.log('[AutoUpdater] Disabled by user setting');
     return;
   }
 

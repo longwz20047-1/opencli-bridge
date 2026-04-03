@@ -28,6 +28,7 @@ export function Settings() {
     setSettings(updated);
     await bridgeInvoke('settings:update', { [key]: value });
     if (key === 'locale') i18n.changeLanguage(value as string);
+    if (key === 'theme') window.dispatchEvent(new CustomEvent('theme-change', { detail: value }));
   };
 
   if (!settings) return <div className="p-6 text-muted-foreground">Loading settings...</div>;

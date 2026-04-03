@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AppLayout } from './layouts/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Servers } from './pages/Servers';
@@ -10,11 +11,39 @@ import SiteControl from './pages/SiteControl';
 import { WelcomeGuide } from './components/WelcomeGuide';
 import { useTheme } from './hooks/useTheme';
 import { useServerStore } from './stores/useServerStore';
+import { bridgeInvoke, useBridgeEvent } from './hooks/useBridge';
+
+function NavigateListener() {
+  const navigate = useNavigate();
+  useBridgeEvent('navigate', (...args: unknown[]) => {
+    const path = (args[0] as { path?: string })?.path;
+    if (path) navigate(path);
+  });
+  return null;
+}
 
 export function App() {
-  useTheme('dark');
+  const { setTheme } = useTheme('dark');
+  const { i18n } = useTranslation();
   const { servers, fetchServers } = useServerStore();
   const [showWelcome, setShowWelcome] = useState(false);
+
+  // Load saved theme and locale from config (P1 #6 fix)
+  useEffect(() => {
+    bridgeInvoke<{ theme?: string; locale?: string }>('settings:get')
+      .then(s => {
+        if (s.theme) setTheme(s.theme as 'dark' | 'light' | 'system');
+        if (s.locale) i18n.changeLanguage(s.locale);
+      })
+      .catch(() => {});
+  }, [setTheme, i18n]);
+
+  // Listen for theme changes from Settings page
+  useEffect(() => {
+    const onThemeChange = (e: Event) => setTheme((e as CustomEvent).detail);
+    window.addEventListener('theme-change', onThemeChange);
+    return () => window.removeEventListener('theme-change', onThemeChange);
+  }, [setTheme]);
 
   useEffect(() => {
     fetchServers().then(() => {
@@ -26,6 +55,7 @@ export function App() {
 
   return (
     <MemoryRouter>
+      <NavigateListener />
       {showWelcome && (
         <WelcomeGuide onConnected={() => { setShowWelcome(false); fetchServers(); }} />
       )}

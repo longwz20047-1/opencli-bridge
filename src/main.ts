@@ -9,7 +9,7 @@ import { ConnectionManager } from './connectionManager';
 import { setupAutoUpdater } from './autoUpdater';
 import { setAutoLaunch } from './autoLaunch';
 import type { BridgeConfig } from './shared/types';
-import { createWindow, setupAppLifecycle, setupMacOSDock, showAndFocus } from './main/windowManager';
+import { createWindow, getMainWindow, setupAppLifecycle, setupMacOSDock, showAndFocus } from './main/windowManager';
 import { registerIpcHandlers, forwardConnectionEvents, setupHistoryRecording } from './main/ipcHandlers';
 import { setupCSP } from './main/securityPolicy';
 
@@ -70,11 +70,20 @@ function startConnection(serverId: string): ConnectionManager | undefined {
   return conn;
 }
 
+function connectAndForward(serverId: string): void {
+  const conn = startConnection(serverId);
+  if (conn) {
+    const win = getMainWindow();
+    if (win) forwardConnectionEvents(win, conn);
+    setupHistoryRecording(conn);
+  }
+}
+
 function handleNewServer(configString: string): void {
   try {
     const server = addServer(config, configString);
     console.log(`[Main] Added server: ${server.name}`);
-    startConnection(server.id);
+    connectAndForward(server.id);
   } catch (err) {
     console.error('[Main] Invalid config string:', err);
   }
@@ -108,8 +117,8 @@ app.whenReady().then(async () => {
   // Window (createWindow handles URL loading internally)
   const mainWindow = createWindow(config);
 
-  // IPC handlers
-  registerIpcHandlers(() => connections);
+  // IPC handlers (pass connectAndForward so servers:add starts connection)
+  registerIpcHandlers(() => connections, connectAndForward);
 
   // Tray
   const tray = createTray([]);
