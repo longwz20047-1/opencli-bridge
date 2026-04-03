@@ -19,7 +19,9 @@
     "test:watch": "vitest",
     "type-check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
     "clean": "rimraf dist release",
-    "lint": "eslint src/ --ext .ts,.tsx"
+    "lint": "eslint src/ --ext .ts,.tsx",
+    "test:e2e": "npm run build && playwright test",
+    "test:all": "npm test && npm run test:e2e"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -54,6 +56,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.59.1",
     "@types/auto-launch": "^5.0.5",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^20.0.0",

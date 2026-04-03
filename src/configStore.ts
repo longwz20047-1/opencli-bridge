@@ -7,7 +7,7 @@ import type { BridgeConfig, ServerConfig } from './shared/types';
 import { migrateConfig } from './main/configMigration';
 import { validateWsUrl } from './main/securityPolicy';
 
-const CONFIG_DIR = process.env.CONFIG_DIR || path.join(os.homedir(), '.opencli-bridge');
+const CONFIG_DIR = process.env.OPENCLI_BRIDGE_CONFIG_DIR || path.join(os.homedir(), '.opencli-bridge');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 export function loadConfig(): BridgeConfig {

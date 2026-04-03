@@ -9,6 +9,16 @@ files:
   - assets/**/*
   - package.json
 
+# @jackwener/opencli contains CLI scripts that need to run outside asar
+asar: true
+asarUnpack:
+  - node_modules/@jackwener/opencli/**
+
+# Register obk:// protocol for browser-based pairing
+protocols:
+  - name: OpenCLI Bridge
+    schemes: [obk]
+
 # electron-builder auto-generates .ico/.icns from icon.png if platform-specific icons are missing
 win:
   target:
