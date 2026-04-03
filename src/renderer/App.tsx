@@ -57,7 +57,7 @@ export function App() {
     <MemoryRouter>
       <NavigateListener />
       {showWelcome && (
-        <WelcomeGuide onConnected={() => { setShowWelcome(false); fetchServers(); }} />
+        <WelcomeGuide onConnected={() => { setShowWelcome(false); fetchServers(); }} onSkip={() => setShowWelcome(false)} />
       )}
       <Routes>
         <Route element={<AppLayout />}>

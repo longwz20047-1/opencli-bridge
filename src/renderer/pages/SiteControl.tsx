@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SiteToggle } from '../components/SiteToggle';
 import { Shield, RefreshCw, RotateCcw } from 'lucide-react';
 import { getDomainForSite, DOMAIN_MAPPING } from '../../shared/domainMapping';
 import { bridgeInvoke } from '../hooks/useBridge';
 
 export default function SiteControl() {
+  const { t } = useTranslation();
   const [allowedSites, setAllowedSites] = useState<string[] | 'prompt'>('prompt');
   const [availableSites, setAvailableSites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,13 +74,13 @@ export default function SiteControl() {
   };
 
   const disableAll = () => {
-    if (!confirm('Disable all sites? Commands for disabled sites will be rejected.')) return;
+    if (!confirm(t('disableAllConfirm'))) return;
     updateSites([]);
   };
 
   const resetToPrompt = () => updateSites('prompt');
 
-  if (loading) return <div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center h-full text-muted-foreground">{t('loading')}</div>;
 
   return (
     <div className="flex flex-col h-full">
@@ -86,20 +88,20 @@ export default function SiteControl() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">Site Control</h1>
+            <h1 className="text-lg font-semibold">{t('siteControl')}</h1>
           </div>
           <div className="text-sm text-muted-foreground">
-            {allowedSites === 'prompt' ? 'Mode: Prompt (all sites visible)' : `${allowedSites.length} of ${availableSites.length} sites enabled`}
+            {allowedSites === 'prompt' ? t('modePrompt') : t('sitesEnabled', { count: allowedSites.length, total: availableSites.length })}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={disableAll} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">Disable All</button>
+          <button onClick={disableAll} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">{t('disableAll')}</button>
           <button onClick={resetToPrompt} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">
-            <RotateCcw className="h-3.5 w-3.5" /> Reset to Prompt
+            <RotateCcw className="h-3.5 w-3.5" /> {t('resetToPrompt')}
           </button>
           <div className="flex-1" />
           <button onClick={handleRescan} disabled={scanning} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">
-            <RefreshCw className={`h-3.5 w-3.5 ${scanning ? 'animate-spin' : ''}`} /> {scanning ? 'Scanning...' : 'Rescan'}
+            <RefreshCw className={`h-3.5 w-3.5 ${scanning ? 'animate-spin' : ''}`} /> {scanning ? t('scanning') : t('rescan')}
           </button>
         </div>
       </div>
@@ -108,8 +110,8 @@ export default function SiteControl() {
         {availableSites.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <Shield className="h-12 w-12 mb-4 opacity-30" />
-            <p className="text-sm">No sites detected.</p>
-            <p className="text-xs mt-1">Connect a server and run a scan to discover available sites.</p>
+            <p className="text-sm">{t('noSitesDetected')}</p>
+            <p className="text-xs mt-1">{t('noSitesHint')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -1,15 +1,27 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Server, Terminal, Globe } from 'lucide-react';
 import { useServerStore } from '../stores/useServerStore';
-import { useBridgeEvent } from '../hooks/useBridge';
+import { useBridgeEvent, bridgeInvoke } from '../hooks/useBridge';
 import { StatusBadge } from '../components/StatusBadge';
 
 export function Dashboard() {
   const { t } = useTranslation();
   const { servers, fetchServers, updateStatus } = useServerStore();
+  const [todayCommands, setTodayCommands] = useState<number | null>(null);
+  const [enabledSites, setEnabledSites] = useState<number | null>(null);
 
   useEffect(() => { fetchServers(); }, [fetchServers]);
+
+  // Fetch today's command count and enabled sites count
+  useEffect(() => {
+    bridgeInvoke<{ todayCount: number }>('history:stats')
+      .then(s => setTodayCommands(s.todayCount))
+      .catch(() => {});
+    bridgeInvoke<{ allowedSites: string[] | 'prompt' }>('sites:list')
+      .then(s => setEnabledSites(s.allowedSites === 'prompt' ? -1 : s.allowedSites.length))
+      .catch(() => {});
+  }, []);
 
   const handleStatus = useCallback((...args: unknown[]) => {
     const data = args[0] as { serverId: string; status: string };
@@ -44,7 +56,7 @@ export function Dashboard() {
             <Terminal className="w-4 h-4" />
             <span className="text-sm">{t('commands')}</span>
           </div>
-          <p className="text-2xl font-bold">—</p>
+          <p className="text-2xl font-bold">{todayCommands !== null ? todayCommands : '—'}</p>
           <p className="text-xs text-muted-foreground">{t('today')}</p>
         </div>
         <div className="border border-border rounded-lg p-4">
@@ -52,7 +64,7 @@ export function Dashboard() {
             <Globe className="w-4 h-4" />
             <span className="text-sm">{t('sites')}</span>
           </div>
-          <p className="text-2xl font-bold">—</p>
+          <p className="text-2xl font-bold">{enabledSites === null ? '—' : enabledSites === -1 ? 'All' : enabledSites}</p>
           <p className="text-xs text-muted-foreground">{t('enabled')}</p>
         </div>
       </div>

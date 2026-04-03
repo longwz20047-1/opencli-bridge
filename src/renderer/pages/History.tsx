@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { History as HistoryIcon, Download, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { bridgeInvoke } from '../hooks/useBridge';
 
@@ -10,6 +11,7 @@ interface HistoryRecord {
 interface HistoryStats { total: number; success: number; failed: number; todayCount: number; }
 
 export default function History() {
+  const { t } = useTranslation();
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [stats, setStats] = useState<HistoryStats>({ total: 0, success: 0, failed: 0, todayCount: 0 });
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function History() {
   }, [records, serverFilter, statusFilter, searchQuery]);
 
   const handleClear = async () => {
-    if (!confirm('Clear all command history? This cannot be undone.')) return;
+    if (!confirm(t('clearConfirm'))) return;
     await bridgeInvoke('history:clear');
     await loadData();
   };
@@ -68,56 +70,56 @@ export default function History() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <HistoryIcon className="h-4 w-4 text-primary" />
-            <h1 className="text-lg font-semibold">History</h1>
+            <h1 className="text-lg font-semibold">{t('history')}</h1>
           </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span>Total: {stats.total}</span>
-            <span className="text-green-400">OK: {stats.success}</span>
-            <span className="text-red-400">Failed: {stats.failed}</span>
-            <span>Today: {stats.todayCount}</span>
+            <span>{t('total')}: {stats.total}</span>
+            <span className="text-green-400">{t('ok')}: {stats.success}</span>
+            <span className="text-red-400">{t('failed')}: {stats.failed}</span>
+            <span>{t('today')}: {stats.todayCount}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <select value={serverFilter} onChange={e => setServerFilter(e.target.value)} className="bg-background border border-border rounded px-2 py-1 text-sm">
-            <option value="all">All Servers</option>
+            <option value="all">{t('allServers')}</option>
             {servers.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-background border border-border rounded px-2 py-1 text-sm">
-            <option value="all">All Status</option>
-            <option value="success">Success</option>
-            <option value="error">Error</option>
-            <option value="timeout">Timeout</option>
+            <option value="all">{t('allStatus')}</option>
+            <option value="success">{t('success')}</option>
+            <option value="error">{t('error')}</option>
+            <option value="timeout">{t('timeout')}</option>
           </select>
-          <input placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+          <input placeholder={t('search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             className="bg-background border border-border rounded px-2 py-1 text-sm w-[180px]" />
           <div className="flex-1" />
           <button onClick={exportJSON} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-accent">
-            <Download className="h-3.5 w-3.5" /> Export
+            <Download className="h-3.5 w-3.5" /> {t('export')}
           </button>
           <button onClick={handleClear} className="inline-flex items-center gap-1 px-3 py-1 text-xs border border-border rounded hover:bg-red-500/10 text-red-400">
-            <Trash2 className="h-3.5 w-3.5" /> Clear
+            <Trash2 className="h-3.5 w-3.5" /> {t('clear')}
           </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>
+          <div className="flex items-center justify-center h-full text-muted-foreground">{t('loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <HistoryIcon className="h-12 w-12 mb-4 opacity-30" />
-            <p className="text-sm">No history records found.</p>
+            <p className="text-sm">{t('noHistoryRecords')}</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr className="text-left text-muted-foreground">
                 <th className="px-3 py-2 w-8" />
-                <th className="px-3 py-2">Time</th>
-                <th className="px-3 py-2">Server</th>
-                <th className="px-3 py-2">Site / Action</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2 text-right">Duration</th>
+                <th className="px-3 py-2">{t('time')}</th>
+                <th className="px-3 py-2">{t('server')}</th>
+                <th className="px-3 py-2">{t('siteAction')}</th>
+                <th className="px-3 py-2">{t('status')}</th>
+                <th className="px-3 py-2 text-right">{t('duration')}</th>
               </tr>
             </thead>
             <tbody>
@@ -136,11 +138,11 @@ export default function History() {
                     <tr className="bg-muted/20">
                       <td colSpan={6} className="px-6 py-3">
                         <div className="grid grid-cols-2 gap-4 text-xs">
-                          <div><p className="font-semibold mb-1">stdout</p><pre className="bg-background p-2 rounded border overflow-x-auto max-h-40 whitespace-pre-wrap">{record.stdout || '(empty)'}</pre></div>
-                          <div><p className="font-semibold mb-1">stderr</p><pre className="bg-background p-2 rounded border overflow-x-auto max-h-40 whitespace-pre-wrap text-red-400">{record.stderr || '(empty)'}</pre></div>
+                          <div><p className="font-semibold mb-1">{t('stdout')}</p><pre className="bg-background p-2 rounded border overflow-x-auto max-h-40 whitespace-pre-wrap">{record.stdout || '(empty)'}</pre></div>
+                          <div><p className="font-semibold mb-1">{t('stderr')}</p><pre className="bg-background p-2 rounded border overflow-x-auto max-h-40 whitespace-pre-wrap text-red-400">{record.stderr || '(empty)'}</pre></div>
                         </div>
                         <div className="mt-2 text-xs text-muted-foreground flex gap-4">
-                          <span>Exit: {record.exitCode}</span><span>ID: {record.id}</span>
+                          <span>{t('exit')}: {record.exitCode}</span><span>ID: {record.id}</span>
                         </div>
                       </td>
                     </tr>

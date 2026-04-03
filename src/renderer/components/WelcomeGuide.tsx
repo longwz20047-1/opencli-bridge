@@ -4,11 +4,12 @@ import { bridgeInvoke } from '../hooks/useBridge';
 
 interface WelcomeGuideProps {
   onConnected: () => void;
+  onSkip?: () => void;
 }
 
 type ConnectState = 'idle' | 'connecting' | 'success' | 'error';
 
-export function WelcomeGuide({ onConnected }: WelcomeGuideProps) {
+export function WelcomeGuide({ onConnected, onSkip }: WelcomeGuideProps) {
   const [configString, setConfigString] = useState('');
   const [connectState, setConnectState] = useState<ConnectState>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -112,7 +113,15 @@ export function WelcomeGuide({ onConnected }: WelcomeGuideProps) {
           )}
         </div>
 
-        <div className="text-center mt-6">
+        <div className="text-center mt-6 flex items-center justify-center gap-4">
+          {onSkip && (
+            <button
+              onClick={onSkip}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Skip for now
+            </button>
+          )}
           <a href="#" className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1">
             Need help? View setup guide <ExternalLink className="h-3 w-3" />
           </a>

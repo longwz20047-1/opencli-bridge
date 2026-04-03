@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Server, Activity, History, Shield, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Server, label: 'Servers', path: '/servers' },
-  { icon: Activity, label: 'Monitor', path: '/monitor' },
-  { icon: History, label: 'History', path: '/history' },
-  { icon: Shield, label: 'Site Control', path: '/sites' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
+const navKeys = [
+  { icon: LayoutDashboard, key: 'dashboard', path: '/' },
+  { icon: Server, key: 'servers', path: '/servers' },
+  { icon: Activity, key: 'monitor', path: '/monitor' },
+  { icon: History, key: 'history', path: '/history' },
+  { icon: Shield, key: 'siteControl', path: '/sites' },
+  { icon: Settings, key: 'settings', path: '/settings' },
 ];
 
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation('nav');
   const [collapsed, setCollapsed] = useState(window.innerWidth < 960);
 
   useEffect(() => {
@@ -34,12 +36,14 @@ export function AppLayout() {
         )}
       >
         <div className="flex-1 py-4">
-          {navItems.map((item) => {
+          {navKeys.map((item) => {
             const isActive = location.pathname === item.path;
+            const label = t(item.key);
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
+                aria-label={label}
                 className={cn(
                   'flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors',
                   isActive
@@ -48,7 +52,7 @@ export function AppLayout() {
                 )}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span>{label}</span>}
               </button>
             );
           })}
