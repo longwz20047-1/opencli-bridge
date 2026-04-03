@@ -6,10 +6,13 @@ import '@fontsource/inter/600.css';
 import './styles/globals.css';
 import './i18n';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const root = createRoot(document.getElementById('root')!);
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

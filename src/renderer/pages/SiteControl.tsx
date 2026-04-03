@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { SiteToggle } from '../components/SiteToggle';
 import { Shield, RefreshCw, RotateCcw } from 'lucide-react';
 import { getDomainForSite, DOMAIN_MAPPING } from '../../shared/domainMapping';
+import { bridgeInvoke } from '../hooks/useBridge';
 
 export default function SiteControl() {
   const [allowedSites, setAllowedSites] = useState<string[] | 'prompt'>('prompt');
@@ -13,11 +14,11 @@ export default function SiteControl() {
     setLoading(true);
     try {
       const [sitesConfig, scannedSites] = await Promise.all([
-        window.bridge.invoke('sites:list'),
-        window.bridge.invoke('sites:scan'),
+        bridgeInvoke<{ allowedSites: string[] | 'prompt' }>('sites:list'),
+        bridgeInvoke<string[]>('sites:scan'),
       ]);
-      setAllowedSites((sitesConfig as any).allowedSites);
-      setAvailableSites(scannedSites as string[]);
+      setAllowedSites(sitesConfig.allowedSites);
+      setAvailableSites(scannedSites);
     } finally { setLoading(false); }
   }, []);
 
@@ -49,7 +50,7 @@ export default function SiteControl() {
 
   const updateSites = async (newSites: string[] | 'prompt') => {
     setAllowedSites(newSites);
-    await window.bridge.invoke('sites:update', newSites);
+    await bridgeInvoke('sites:update', newSites);
   };
 
   const handleToggle = (site: string, enabled: boolean) => {
@@ -65,8 +66,8 @@ export default function SiteControl() {
   const handleRescan = async () => {
     setScanning(true);
     try {
-      const scanned = await window.bridge.invoke('sites:scan');
-      setAvailableSites(scanned as string[]);
+      const scanned = await bridgeInvoke<string[]>('sites:scan');
+      setAvailableSites(scanned);
     } finally { setScanning(false); }
   };
 

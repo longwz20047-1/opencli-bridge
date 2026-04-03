@@ -19,10 +19,16 @@ export function useCommandLog(maxRecords = 200) {
   const [commands, setCommands] = useState<CommandEvent[]>([]);
   const [autoscroll, setAutoscroll] = useState(true);
   const pendingUpdates = useRef<CommandEvent[]>([]);
-  const rafId = useRef<number>();
+  const rafId = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    const unsubReceived = window.bridge.on('command:received', (...args: unknown[]) => {
+    if (!window.bridge) {
+      console.error('[useCommandLog] Bridge not available');
+      return () => {};
+    }
+    const bridge = window.bridge;
+
+    const unsubReceived = bridge.on('command:received', (...args: unknown[]) => {
       const event = args[0] as any;
       pendingUpdates.current.push({ ...event, status: 'executing', startedAt: new Date().toISOString() });
       if (!rafId.current) {
@@ -34,7 +40,7 @@ export function useCommandLog(maxRecords = 200) {
       }
     });
 
-    const unsubCompleted = window.bridge.on('command:completed', (...args: unknown[]) => {
+    const unsubCompleted = bridge.on('command:completed', (...args: unknown[]) => {
       const event = args[0] as any;
       setCommands(prev =>
         prev.map(c => c.id === event.id ? { ...c, ...event, status: event.success ? 'success' : (event.exitCode === 124 ? 'timeout' : 'error') } : c)

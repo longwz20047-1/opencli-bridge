@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Rocket, ClipboardPaste, ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react';
+import { bridgeInvoke } from '../hooks/useBridge';
 
 interface WelcomeGuideProps {
   onConnected: () => void;
@@ -30,7 +31,7 @@ export function WelcomeGuide({ onConnected }: WelcomeGuideProps) {
     setErrorMessage('');
 
     try {
-      await window.bridge.invoke('servers:add', value);
+      await bridgeInvoke('servers:add', value);
       setConnectState('success');
       setTimeout(() => onConnected(), 1500);
     } catch (err: any) {

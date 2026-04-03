@@ -115,17 +115,13 @@ app.whenReady().then(async () => {
   const tray = createTray([]);
   await ensureTrayVisibility(tray);
 
-  // Protocol handler (obk:// links)
+  // Protocol handler (obk:// links) — owns all URL routing including second-instance
   setupProtocolHandler(handleNewServer);
   setOnAddServer(handleNewServer);
 
-  // Second instance: show window + handle protocol URL
-  app.on('second-instance', (_event, argv) => {
+  // Second instance: only show window (URL routing handled by protocolHandler)
+  app.on('second-instance', () => {
     showAndFocus();
-    const obkArg = argv.find(a => a.startsWith('obk://'));
-    if (obkArg) {
-      handleNewServer(obkArg.replace('obk://', ''));
-    }
   });
 
   // Connect to all configured servers

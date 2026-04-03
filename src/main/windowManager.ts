@@ -54,11 +54,16 @@ export function createWindow(config: BridgeConfig): BrowserWindow {
   mainWindow.on('resize', saveBounds);
   mainWindow.on('move', saveBounds);
 
-  // Close = hide to tray (not quit)
+  // Close behavior: respect closeAction config (C5 fix)
   mainWindow.on('close', (event) => {
     if (!(app as any).isQuitting) {
-      event.preventDefault();
-      mainWindow?.hide();
+      if (config.closeAction === 'quit') {
+        (app as any).isQuitting = true;
+        app.quit();
+      } else {
+        event.preventDefault();
+        mainWindow?.hide();
+      }
     }
   });
 

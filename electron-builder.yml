@@ -6,7 +6,9 @@ directories:
 
 files:
   - dist/**/*
+  - "!dist/**/__tests__"
   - assets/**/*
+  - "!assets/ICONS_NEEDED.md"
   - package.json
 
 # @jackwener/opencli contains CLI scripts that need to run outside asar

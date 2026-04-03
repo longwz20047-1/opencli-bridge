@@ -1,6 +1,7 @@
 import spawn from 'cross-spawn';
 import path from 'path';
 import type { BridgeCommand, BridgeResult } from './shared/types';
+import { loadConfig } from './configStore';
 
 // Resolve bundled opencli path
 const OPENCLI_BIN = path.join(__dirname, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'main.js');
@@ -56,8 +57,9 @@ async function executeCommand(cmd: BridgeCommand): Promise<BridgeResult> {
     let stderr = '';
     let resolved = false;
 
-    // Manual timeout implementation
-    const timeout = cmd.timeout || 30000;
+    // Use config commandTimeout as default, per-command timeout overrides (C5 fix)
+    const configTimeout = (loadConfig().commandTimeout || 30) * 1000;
+    const timeout = cmd.timeout || configTimeout;
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;

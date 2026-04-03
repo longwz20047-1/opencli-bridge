@@ -4,6 +4,25 @@ import EventEmitter from 'events';
 import type { ServerConfig, BridgeConfig, BridgeCommand, BridgeResult } from './shared/types';
 import { execute } from './commandRunner';
 import { scanAvailableSites } from './capabilityScanner';
+import { loadConfig } from './configStore';
+
+/** Runtime validation of BridgeCommand from WebSocket (C2 fix) */
+function isValidCommand(msg: unknown): msg is BridgeCommand {
+  return typeof msg === 'object' && msg !== null
+    && (msg as any).type === 'command'
+    && typeof (msg as any).id === 'string'
+    && typeof (msg as any).site === 'string'
+    && typeof (msg as any).action === 'string'
+    && Array.isArray((msg as any).args)
+    && (msg as any).args.every((a: unknown) => typeof a === 'string');
+}
+
+/** Check if site is allowed by allowedSites config (C1 fix) */
+function isSiteAllowed(site: string): boolean {
+  const config = loadConfig();
+  if (config.allowedSites === 'prompt') return true;
+  return config.allowedSites.includes(site);
+}
 
 // Read bundled opencli version from its package.json at runtime
 function getBundledOpenCliVersion(): string {
@@ -57,10 +76,17 @@ export class ConnectionManager extends (EventEmitter as new () => TypedEmitter<C
       headers['x-bridge-pairing-token'] = this.serverConfig.pairingToken;
     }
 
-    const ws = new WebSocket(this.serverConfig.wsUrl, {
-      headers,
-      handshakeTimeout: 10000,
-    });
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.serverConfig.wsUrl, {
+        headers,
+        handshakeTimeout: 10000,
+      });
+    } catch (err) {
+      this.emit('error', this.serverConfig.id, err instanceof Error ? err : new Error(String(err)));
+      this.scheduleReconnect();
+      return;
+    }
 
     ws.on('open', () => {
       this.ws = ws;
@@ -76,7 +102,22 @@ export class ConnectionManager extends (EventEmitter as new () => TypedEmitter<C
         if (msg.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
         } else if (msg.type === 'command') {
-          const cmd = msg as BridgeCommand;
+          if (!isValidCommand(msg)) {
+            console.error('[WS] Invalid command payload, skipping:', JSON.stringify(msg).slice(0, 200));
+            return;
+          }
+          const cmd = msg;
+          if (!isSiteAllowed(cmd.site)) {
+            console.warn(`[WS] Site "${cmd.site}" is not in allowedSites, rejecting command ${cmd.id}`);
+            if (this.ws?.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({
+                type: 'result', id: cmd.id, success: false,
+                stdout: '', stderr: `Site "${cmd.site}" is disabled in Site Control settings.`,
+                exitCode: -1, durationMs: 0,
+              }));
+            }
+            return;
+          }
           this.emit('command:start', this.serverConfig.id, cmd);
           const result = await execute(cmd);
           this.emit('command:complete', this.serverConfig.id, cmd, result);

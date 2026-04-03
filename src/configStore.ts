@@ -48,7 +48,10 @@ export function loadConfig(): BridgeConfig {
 export function saveConfig(config: BridgeConfig): void {
   try {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    // Atomic write: temp file + rename (I9 fix)
+    const tmpFile = CONFIG_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, JSON.stringify(config, null, 2));
+    fs.renameSync(tmpFile, CONFIG_FILE);
 
     // Cross-platform file permissions
     if (process.platform === 'win32') {

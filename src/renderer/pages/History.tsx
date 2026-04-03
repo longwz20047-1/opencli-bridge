@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { History as HistoryIcon, Download, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { bridgeInvoke } from '../hooks/useBridge';
 
 interface HistoryRecord {
   id: string; serverId: string; serverName: string; site: string; action: string; args: string[];
@@ -21,11 +22,11 @@ export default function History() {
     setLoading(true);
     try {
       const [h, s] = await Promise.all([
-        window.bridge.invoke('history:list'),
-        window.bridge.invoke('history:stats'),
+        bridgeInvoke<HistoryRecord[]>('history:list'),
+        bridgeInvoke<HistoryStats>('history:stats'),
       ]);
-      setRecords(h as HistoryRecord[]);
-      setStats(s as HistoryStats);
+      setRecords(h);
+      setStats(s);
     } finally { setLoading(false); }
   }, []);
 
@@ -47,7 +48,7 @@ export default function History() {
 
   const handleClear = async () => {
     if (!confirm('Clear all command history? This cannot be undone.')) return;
-    await window.bridge.invoke('history:clear');
+    await bridgeInvoke('history:clear');
     await loadData();
   };
 

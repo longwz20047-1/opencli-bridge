@@ -8,30 +8,54 @@ import type { ConnectionManager } from '../connectionManager';
 import { LocalHistory } from './localHistory';
 import { scanAvailableSites } from '../capabilityScanner';
 
-const localHistory = new LocalHistory(
-  path.join(os.homedir(), '.opencli-bridge', 'history.json'),
-);
+// Use config-driven maxRecords (C5 fix)
+function createLocalHistory(): LocalHistory {
+  const config = loadConfig();
+  return new LocalHistory(
+    path.join(process.env.OPENCLI_BRIDGE_CONFIG_DIR || path.join(os.homedir(), '.opencli-bridge'), 'history.json'),
+    config.maxHistoryRecords || 2000,
+  );
+}
+
+const localHistory = createLocalHistory();
+
+// Settings whitelist (C9 fix)
+const ALLOWED_SETTINGS_KEYS = [
+  'autoStart', 'autoUpdate', 'enforceWss', 'closeAction',
+  'commandTimeout', 'maxHistoryRecords', 'theme', 'locale',
+  'logLevel', 'updateChannel', 'allowedSites',
+];
+
+/** Wrap IPC handler with try/catch (C7 fix) */
+function safeHandle(channel: string, handler: (...args: any[]) => any): void {
+  ipcMain.handle(channel, async (...args) => {
+    try {
+      return await handler(...args);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[IPC] ${channel} error:`, msg);
+      throw new Error(msg);
+    }
+  });
+}
 
 /**
  * Register all IPC invoke handlers.
- * Called once during app.whenReady().
  */
 export function registerIpcHandlers(
   getConnections: () => Map<string, ConnectionManager>,
 ): void {
   // Server management
-  ipcMain.handle(IPC.SERVERS_LIST, () => {
-    const config = loadConfig();
-    return config.servers;
+  safeHandle(IPC.SERVERS_LIST, () => {
+    return loadConfig().servers;
   });
 
-  ipcMain.handle(IPC.SERVERS_ADD, (_event, configString: string) => {
+  safeHandle(IPC.SERVERS_ADD, (_event, configString: string) => {
     const config = loadConfig();
-    const server = addServer(config, configString);
-    return server;
+    return addServer(config, configString);
   });
 
-  ipcMain.handle(IPC.SERVERS_REMOVE, (_event, serverId: string) => {
+  safeHandle(IPC.SERVERS_REMOVE, (_event, serverId: string) => {
     const config = loadConfig();
     const conn = getConnections().get(serverId);
     if (conn) {
@@ -41,7 +65,7 @@ export function registerIpcHandlers(
     removeServer(config, serverId);
   });
 
-  ipcMain.handle(IPC.SERVERS_RECONNECT, (_event, serverId: string) => {
+  safeHandle(IPC.SERVERS_RECONNECT, (_event, serverId: string) => {
     const conn = getConnections().get(serverId);
     if (conn) {
       conn.disconnect();
@@ -49,39 +73,48 @@ export function registerIpcHandlers(
     }
   });
 
-  // Settings
-  ipcMain.handle(IPC.SETTINGS_GET, () => {
+  // Settings (C9: whitelist allowed keys)
+  safeHandle(IPC.SETTINGS_GET, () => {
     const config = loadConfig();
     const { servers, ...settings } = config;
     return settings;
   });
 
-  ipcMain.handle(IPC.SETTINGS_UPDATE, (_event, updates: Record<string, unknown>) => {
+  safeHandle(IPC.SETTINGS_UPDATE, (_event, updates: Record<string, unknown>) => {
     const config = loadConfig();
-    Object.assign(config, updates);
+    const filtered = Object.fromEntries(
+      Object.entries(updates).filter(([k]) => ALLOWED_SETTINGS_KEYS.includes(k))
+    );
+    Object.assign(config, filtered);
     saveConfig(config);
     return config;
   });
 
   // History
-  ipcMain.handle(IPC.HISTORY_LIST, () => localHistory.list());
-  ipcMain.handle(IPC.HISTORY_CLEAR, () => localHistory.clear());
-  ipcMain.handle(IPC.HISTORY_STATS, () => localHistory.stats());
-  ipcMain.handle(IPC.HISTORY_DETAIL, (_event, id: string) => {
+  safeHandle(IPC.HISTORY_LIST, () => localHistory.list());
+  safeHandle(IPC.HISTORY_CLEAR, () => localHistory.clear());
+  safeHandle(IPC.HISTORY_STATS, () => localHistory.stats());
+  safeHandle(IPC.HISTORY_DETAIL, (_event, id: string) => {
     return localHistory.list().then(records => records.find(r => r.id === id));
   });
 
   // Sites
-  ipcMain.handle(IPC.SITES_LIST, () => {
-    const config = loadConfig();
-    return { allowedSites: config.allowedSites };
+  safeHandle(IPC.SITES_LIST, () => {
+    return { allowedSites: loadConfig().allowedSites };
   });
-  ipcMain.handle(IPC.SITES_UPDATE, (_event, sites: string[] | 'prompt') => {
+  safeHandle(IPC.SITES_UPDATE, (_event, sites: string[] | 'prompt') => {
     const config = loadConfig();
     config.allowedSites = sites;
     saveConfig(config);
   });
-  ipcMain.handle(IPC.SITES_SCAN, () => scanAvailableSites());
+  safeHandle(IPC.SITES_SCAN, () => scanAvailableSites());
+
+  // Stub handlers for channels defined but not yet implemented (C4 fix)
+  safeHandle(IPC.COMMAND_TEST, () => { throw new Error('Not implemented: command:test'); });
+  safeHandle(IPC.DIAG_RUN, () => { throw new Error('Not implemented: diag:run'); });
+  safeHandle(IPC.DIAG_CONNECTIVITY, () => { throw new Error('Not implemented: diag:connectivity'); });
+  safeHandle(IPC.UPDATE_CHECK, () => { throw new Error('Not implemented: update:check'); });
+  safeHandle(IPC.UPDATE_INSTALL, () => { throw new Error('Not implemented: update:install'); });
 }
 
 /**
@@ -105,12 +138,12 @@ export function setupHistoryRecording(conn: ConnectionManager): void {
       durationMs: result.durationMs,
       startedAt: new Date(Date.now() - result.durationMs).toISOString(),
       completedAt: new Date().toISOString(),
-    });
+    }).catch(err => console.error('[History] Failed to record:', err));
   });
 }
 
 /**
- * Set up event listeners that forward connectionManager events to the renderer via IPC.
+ * Forward connectionManager events to renderer via IPC.
  */
 export function forwardConnectionEvents(
   mainWindow: BrowserWindow,
