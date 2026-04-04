@@ -1,8 +1,13 @@
 import { spawn } from 'child_process';
 import path from 'path';
 
-// Use the bundled opencli — same bin as commandRunner.ts to ensure consistency
-const OPENCLI_BIN = path.join(__dirname, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'main.js');
+// Use the bundled opencli — same bin as commandRunner.ts to ensure consistency.
+// In packaged Electron apps, asarUnpack'd files are at app.asar.unpacked/
+// but child_process.spawn can't read from app.asar, so we replace the path.
+function getOpencliPath(): string {
+  const base = path.join(__dirname, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'main.js');
+  return base.replace('app.asar', 'app.asar.unpacked');
+}
 
 /**
  * Async scan: discover available opencli sites from the bundled binary.
@@ -11,7 +16,7 @@ const OPENCLI_BIN = path.join(__dirname, '..', 'node_modules', '@jackwener', 'op
  */
 export function scanAvailableSites(): Promise<string[]> {
   return new Promise((resolve) => {
-    const child = spawn('node', [OPENCLI_BIN, 'list', '-f', 'json'], {
+    const child = spawn('node', [getOpencliPath(), 'list', '-f', 'json'], {
       timeout: 10000,
     });
 

@@ -71,6 +71,8 @@ function startConnection(serverId: string): ConnectionManager | undefined {
 }
 
 function connectAndForward(serverId: string): void {
+  // Reload config to pick up newly added servers (ipcHandlers writes to disk)
+  config = loadConfig();
   const conn = startConnection(serverId);
   if (conn) {
     const win = getMainWindow();

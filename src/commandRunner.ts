@@ -4,7 +4,11 @@ import type { BridgeCommand, BridgeResult } from './shared/types';
 import { loadConfig } from './configStore';
 
 // Resolve bundled opencli path
-const OPENCLI_BIN = path.join(__dirname, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'main.js');
+// In packaged Electron, asarUnpack'd files are at app.asar.unpacked/
+function getOpencliPath(): string {
+  const base = path.join(__dirname, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'main.js');
+  return base.replace('app.asar', 'app.asar.unpacked');
+}
 
 const MAX_CONCURRENT = 3;
 export const MAX_QUEUE = 100;
@@ -52,7 +56,7 @@ async function executeCommand(cmd: BridgeCommand): Promise<BridgeResult> {
 
   return new Promise((resolve) => {
     // Use bundled opencli via node
-    const child = spawn('node', [OPENCLI_BIN, ...args], { env });
+    const child = spawn('node', [getOpencliPath(), ...args], { env });
     let stdout = '';
     let stderr = '';
     let resolved = false;

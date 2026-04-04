@@ -80,20 +80,21 @@ export async function updateTray(servers: ServerStatus[]): Promise<void> {
 
   const agg = aggregateStatus(servers);
   const aggIcon = agg === 'connected' ? '●' : agg === 'partial' ? '◐' : '○';
-  const aggText = agg === 'connected' ? 'Connected' : agg === 'partial' ? 'Partial' : 'Disconnected';
+  const aggText = agg === 'connected' ? '已连接' : agg === 'partial' ? '部分连接' : '已断开';
 
   tray.setToolTip(`OpenCLI Bridge — ${aggText}`);
 
   // Per-server status entries
+  const statusLabel = { connected: '已连接', connecting: '连接中', disconnected: '已断开' };
   const serverItems: Electron.MenuItemConstructorOptions[] = servers.length > 0
     ? servers.map(s => {
         const icon = s.status === 'connected' ? '●' : s.status === 'connecting' ? '◌' : '○';
         return {
-          label: `  ${icon} ${s.name} — ${s.status}`,
+          label: `  ${icon} ${s.name} — ${statusLabel[s.status]}`,
           enabled: false,
         };
       })
-    : [{ label: '  ○ No servers configured', enabled: false }];
+    : [{ label: '  ○ 未配置服务器', enabled: false }];
 
   const menu = Menu.buildFromTemplate([
     {
@@ -102,7 +103,7 @@ export async function updateTray(servers: ServerStatus[]): Promise<void> {
     },
     { type: 'separator' },
     {
-      label: 'Show Window',
+      label: '显示窗口',
       click: () => {
         // Dynamic import to avoid circular dependency
         const { showAndFocus } = require('./main/windowManager');
@@ -112,10 +113,10 @@ export async function updateTray(servers: ServerStatus[]): Promise<void> {
     { type: 'separator' },
     ...serverItems,
     { type: 'separator' },
-    { label: 'Add Server...', click: () => showPasteDialog() },
+    { label: '添加服务器...', click: () => showPasteDialog() },
     { type: 'separator' },
     {
-      label: 'Quit',
+      label: '退出',
       click: () => {
         (app as any).isQuitting = true;
         app.quit();

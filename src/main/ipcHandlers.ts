@@ -49,7 +49,12 @@ export function registerIpcHandlers(
 ): void {
   // Server management
   safeHandle(IPC.SERVERS_LIST, () => {
-    return loadConfig().servers;
+    const config = loadConfig();
+    const conns = getConnections();
+    return config.servers.map(s => ({
+      ...s,
+      status: conns.get(s.id)?.isConnected ? 'connected' : 'disconnected',
+    }));
   });
 
   safeHandle(IPC.SERVERS_ADD, (_event, configString: string) => {
@@ -74,8 +79,9 @@ export function registerIpcHandlers(
     const conn = getConnections().get(serverId);
     if (conn) {
       conn.disconnect();
-      conn.connect();
     }
+    // Always go through connectAndForward to reload config and create fresh connection
+    onServerAdded?.(serverId);
   });
 
   // Settings (C9: whitelist allowed keys)

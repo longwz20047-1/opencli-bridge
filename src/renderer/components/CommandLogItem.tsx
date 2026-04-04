@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { CommandEvent } from '../hooks/useCommandLog';
 
 interface CommandLogItemProps {
@@ -5,11 +6,20 @@ interface CommandLogItemProps {
 }
 
 export function CommandLogItem({ command }: CommandLogItemProps) {
+  const { t } = useTranslation();
+
   const statusColor = {
     executing: 'text-primary',
     success: 'text-green-400',
     error: 'text-red-400',
     timeout: 'text-yellow-400',
+  };
+
+  const statusLabel = {
+    executing: t('executing'),
+    success: t('success'),
+    error: t('error'),
+    timeout: t('timeout'),
   };
 
   return (
@@ -20,7 +30,7 @@ export function CommandLogItem({ command }: CommandLogItemProps) {
       <span className="font-medium shrink-0">{command.site}/{command.action}</span>
       <span className="text-muted-foreground truncate flex-1">{command.args?.join(' ')}</span>
       <span className={`shrink-0 ${statusColor[command.status]}`}>
-        {command.status}
+        {statusLabel[command.status]}
       </span>
       {command.durationMs != null && (
         <span className="text-muted-foreground shrink-0 w-16 text-right">

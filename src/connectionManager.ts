@@ -184,6 +184,26 @@ export class ConnectionManager extends (EventEmitter as new () => TypedEmitter<C
       console.error('[WS] Error:', err.message);
       this.emit('error', this.serverConfig.id, err);
     });
+
+    // Handle HTTP upgrade rejection — server sends X-Bridge-Close-Code header
+    // to indicate permanent rejection (4001=key revoked, 4002=token expired)
+    ws.on('unexpected-response', (_req: any, res: any) => {
+      const closeCode = res.headers?.['x-bridge-close-code'];
+      if (closeCode === '4001') {
+        console.error('[WS] API key revoked (upgrade rejected). Not reconnecting.');
+        this.emit('status', this.serverConfig.id, 'disconnected');
+        return; // Don't reconnect
+      }
+      if (closeCode === '4002') {
+        console.error('[WS] Pairing token expired (upgrade rejected). Not reconnecting.');
+        this.emit('status', this.serverConfig.id, 'disconnected');
+        return; // Don't reconnect
+      }
+      // Other upgrade failures: schedule reconnect
+      console.warn(`[WS] Upgrade rejected with status ${res.statusCode}. Reconnecting...`);
+      this.emit('status', this.serverConfig.id, 'disconnected');
+      this.scheduleReconnect();
+    });
   }
 
   private async sendRegister(): Promise<void> {

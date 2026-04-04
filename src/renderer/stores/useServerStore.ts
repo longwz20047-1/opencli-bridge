@@ -24,7 +24,7 @@ export const useServerStore = create<ServerStore>((set) => ({
     set({ loading: true });
     try {
       const servers = await bridgeInvoke<ServerState[]>('servers:list');
-      set({ servers: servers.map(s => ({ ...s, status: 'disconnected' })), loading: false });
+      set({ servers, loading: false });
     } catch {
       set({ loading: false });
     }
